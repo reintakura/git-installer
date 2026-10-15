@@ -4,7 +4,7 @@ Helper scripts that make it easy for developers to install Git.
 
 ## macOS
 
-Installs Homebrew (if missing) and Git via Homebrew.
+Installs Git into your home folder (`~/.local/portable-git`) using micromamba and conda-forge. No sudo, admin rights, Homebrew, or Xcode needed.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/reintakura/git-installer/main/install.sh | bash

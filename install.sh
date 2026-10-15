@@ -1,84 +1,67 @@
 #!/usr/bin/env bash
-# macOS Homebrew + Git installer
-# Designed to be executed via: curl -fsSL https://raw.githubusercontent.com/reintakura/git-installer/main/install.sh | bash
-# Authorized/public distribution context assumed.
+# macOS Git installer — NO sudo / admin needed.
+# Installs Git from conda-forge via micromamba into your home folder.
+# Usage: curl -fsSL https://raw.githubusercontent.com/reintakura/git-installer/main/install.sh | bash
 
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 log()   { echo -e "${GREEN}[+]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $*"; }
 error() { echo -e "${RED}[x]${NC} $*" >&2; exit 1; }
 
-# Ensure we're on macOS
-if [[ "$(uname -s)" != "Darwin" ]]; then
+OS="$(uname -s)"
+if [[ "$OS" != "Darwin" && "${GIT_INSTALLER_ALLOW_LINUX:-}" != "1" ]]; then
   error "This script is for macOS only."
 fi
 
-# Detect architecture
-ARCH="$(uname -m)"
-if [[ "$ARCH" == "arm64" ]]; then
-  BREW_PREFIX="/opt/homebrew"
-else
-  BREW_PREFIX="/usr/local"
+case "$OS-$(uname -m)" in
+  Darwin-arm64)  PLATFORM="osx-arm64" ;;
+  Darwin-x86_64) PLATFORM="osx-64" ;;
+  Linux-x86_64)  PLATFORM="linux-64" ;;
+  *) error "Unsupported platform: $OS $(uname -m)" ;;
+esac
+
+PREFIX="${GIT_INSTALL_PREFIX:-$HOME/.local/portable-git}"
+MAMBA="$PREFIX/micromamba/bin/micromamba"
+ENV_DIR="$PREFIX/env"
+BIN_DIR="$HOME/.local/bin"
+
+log "Install location: $PREFIX (no sudo needed)"
+mkdir -p "$PREFIX/micromamba" "$BIN_DIR"
+
+# --- Step 1: micromamba (single static binary, user scope) ---
+if [[ ! -x "$MAMBA" ]]; then
+  log "Downloading micromamba ($PLATFORM)..."
+  curl -fsSL "https://micro.mamba.pm/api/micromamba/$PLATFORM/latest" \
+    | tar -xj -C "$PREFIX/micromamba" bin/micromamba \
+    || error "Failed to download micromamba."
 fi
 
-# Function to ensure brew is in PATH for the current session
-ensure_brew_path() {
-  if [[ -x "${BREW_PREFIX}/bin/brew" ]]; then
-    eval "$(${BREW_PREFIX}/bin/brew shellenv)"
-  fi
-}
-
-# --- Step 1: Install Homebrew if missing ---
-log "Checking for Homebrew..."
-if command -v brew >/dev/null 2>&1; then
-  log "Homebrew already installed: $(brew --version | head -n1)"
+# --- Step 2: Git from conda-forge ---
+if [[ -x "$ENV_DIR/bin/git" ]]; then
+  log "Git already installed, updating..."
+  "$MAMBA" update -y -q -r "$PREFIX/root" -p "$ENV_DIR" -c conda-forge git >/dev/null \
+    || warn "Update failed, keeping existing Git."
 else
-  log "Homebrew not found. Installing..."
-  # Official non-interactive-friendly installer
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || error "Homebrew installation failed."
-
-  # Make brew available in this session
-  ensure_brew_path
-
-  if ! command -v brew >/dev/null 2>&1; then
-    error "Homebrew installed but not found in PATH. Please open a new terminal and re-run, or source your shell profile."
-  fi
-  log "Homebrew installed successfully."
+  log "Installing Git (this can take a minute)..."
+  "$MAMBA" create -y -q -r "$PREFIX/root" -p "$ENV_DIR" -c conda-forge git >/dev/null \
+    || error "Git installation failed."
 fi
 
-# Ensure PATH is set for the rest of the script
-ensure_brew_path
+# --- Step 3: expose git on PATH ---
+ln -sf "$ENV_DIR/bin/git" "$BIN_DIR/git"
 
-# --- Step 2: Install Git via Homebrew ---
-log "Checking for Git..."
-if command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1; then
-  CURRENT_GIT="$(git --version)"
-  # Prefer brew's git if available
-  if brew list git >/dev/null 2>&1; then
-    log "Git already installed via Homebrew: $CURRENT_GIT"
-  else
-    log "Git found (system/Xcode): $CURRENT_GIT — installing Homebrew version for consistency..."
-    brew install git || error "Failed to install git via Homebrew."
-    log "Homebrew Git installed: $(git --version)"
-  fi
-else
-  log "Git not found. Installing via Homebrew..."
-  brew install git || error "Failed to install git via Homebrew."
-  log "Git installed: $(git --version)"
-fi
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+for rc in "$HOME/.zshrc" "$HOME/.bash_profile"; do
+  touch "$rc"
+  grep -qxF "$PATH_LINE" "$rc" || { echo "$PATH_LINE" >> "$rc"; log "Added ~/.local/bin to PATH in $rc"; }
+done
+export PATH="$BIN_DIR:$PATH"
 
-# Final verification
-log "Verification:"
-echo "  Homebrew: $(brew --version | head -n1)"
-echo "  Git:      $(git --version)"
-echo "  Prefix:   ${BREW_PREFIX}"
-
-log "Done. Homebrew and Git are ready."
-log "Note: You may need to restart your terminal or run 'source ~/.zshrc' (or ~/.bash_profile) for PATH changes to persist in new sessions."
+# --- Verify ---
+GIT_VER="$("$BIN_DIR/git" --version)" || error "Git installed but failed to run."
+log "Success: $GIT_VER"
+log "Location: $ENV_DIR/bin/git"
+log "Open a new terminal (or run: source ~/.zshrc) to use git everywhere."
+log "Uninstall: rm -rf \"$PREFIX\" \"$BIN_DIR/git\""
