@@ -19,3 +19,17 @@ iwr -useb https://raw.githubusercontent.com/reintakura/git-installer/main/instal
 ```
 
 Open a new terminal afterwards so PATH changes take effect.
+
+## Uninstall / cleanup
+
+macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/reintakura/git-installer/main/uninstall.sh | bash
+```
+
+Windows (PowerShell):
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/reintakura/git-installer/main/uninstall-portable-git.ps1 | iex
+```
