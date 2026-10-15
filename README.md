@@ -1,0 +1,21 @@
+# git-installer
+
+Helper scripts that make it easy for developers to install Git.
+
+## macOS
+
+Installs Homebrew (if missing) and Git via Homebrew.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/reintakura/git-installer/main/install.sh | bash
+```
+
+## Windows (PowerShell)
+
+Installs portable Git (MinGit) to `%USERPROFILE%\PortableGit` and adds it to your user PATH. No admin rights needed.
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/reintakura/git-installer/main/install-portable-git.ps1 | iex
+```
+
+Open a new terminal afterwards so PATH changes take effect.
